@@ -12,22 +12,22 @@ import java.lang.RuntimeException
 import java.time.Duration
 
 class Manager(
-        context: Context,
+        private val fContext: Context,
         private val fModel: MainModel,
         private val fScanTimeout: Duration = Duration.ofSeconds(10)
 ) : ScanCallback() {
 
     companion object {
-        private const val TAG = "Manager";
+        private const val TAG = "Manager"
     }
 
     private val fEventScheduler = Handler()
     private var fIsScanning = false
     private val fBluetoothAdapter: BluetoothAdapter
-
+    private val fSensors = mutableMapOf<String, Sensor>()
 
     init {
-        val bluetoothManager = context.getSystemService(BluetoothManager::class.java)
+        val bluetoothManager = fContext.getSystemService(BluetoothManager::class.java)
                 ?: throw RuntimeException("Failed to acquire Bluetooth manager service!")
         fBluetoothAdapter = bluetoothManager.adapter
     }
@@ -36,14 +36,12 @@ class Manager(
 
     override fun onScanResult(callbackType: Int, result: ScanResult?) {
         Log.i(TAG, "scan result: $result")
-    }
-
-    override fun onScanFailed(errorCode: Int) {
-        Log.e(TAG, "scan failure: $errorCode")
-    }
-
-    override fun onBatchScanResults(results: MutableList<ScanResult>?) {
-        Log.i(TAG, "batch scan result: $results")
+        result?.device?.let { device ->
+            if (!fSensors.contains(device.address)) {
+                Log.i(TAG, "Trying to connect to sensor at address '${device.address}'")
+                fSensors[device.address] = Sensor(fContext, device)
+            }
+        }
     }
 
     // Public interface implementation
@@ -58,7 +56,6 @@ class Manager(
             return
         }
 
-        Log.i(TAG, "starting bluetooth device scan")
         fBluetoothAdapter.bluetoothLeScanner.startScan(this)
         fIsScanning = true
         fEventScheduler.postDelayed({
